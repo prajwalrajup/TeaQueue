@@ -1,0 +1,7 @@
+kafka:
+  name: local
+  brokers:
+    - localhost:9092
+  group: kafka-ui
+  topic:
+    - topic1
