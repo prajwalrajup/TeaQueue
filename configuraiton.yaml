@@ -1,7 +1,8 @@
-kafka:
-  name: local
-  brokers:
-    - localhost:9092
-  group: kafka-ui
-  topic:
-    - topic1
+hosts:
+  local:
+    brokers:
+      - localhost:9092
+    group: kafka-ui
+    network: local
+    topic:
+      - topic1
