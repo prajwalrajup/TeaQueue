@@ -1,91 +1,13 @@
-// package main
-
-// import (
-// 	"fmt"
-
-// 	"github.com/confluentinc/confluent-kafka-go/kafka"
-// 	"github.com/rivo/tview"
-// 	"time"
-// 	// "kafka-ui/utils"
-// )
-
-// func logsView(host string, topic string) tview.Primitive {
-
-// 	textView = tview.NewTextView()
-
-// 	textView.SetText("sdf asf\nasdfasf")
-// 	textView.SetDynamicColors(true)
-// 	textView.SetTextColor(tview.Styles.PrimaryTextColor)
-// 	textView.SetTitle(fmt.Sprintf("  Logs (%s:%s) ", host, topic))
-// 	textView.SetBorderPadding(1, 1, 1, 1)
-// 	textView.SetBorder(true)
-// 	return textView
-// }
-
-// var app *tview.Application
-// var textView *tview.TextView
-
-// func main() {
-// 	// Create a new application
-// 	app = tview.NewApplication()
-
-// 	// Create a layout to center the TextView
-// 	flex := tview.NewFlex().
-// 		SetDirection(tview.FlexRow).
-// 		AddItem(nil, 0, 1, false).
-// 		AddItem(logsView("local", "myTopic"), 0, 10, true)
-
-// 	// Set the root primitive to the flex layout
-// 	app.SetRoot(flex, true)
-
-// 	// Run the application
-// 	if err := app.Run(); err != nil {
-// 		panic(err)
-// 	}
-
-// 	// Kafka consumer
-// 	consumer, err := kafka.NewConsumer(&kafka.ConfigMap{
-// 		"bootstrap.servers": "localhost:9092",
-// 		"group.id":          "foo",
-// 		"auto.offset.reset": "earliest"})
-// 	if err != nil {
-// 		panic(err)
-// 	}
-
-// 	err = consumer.SubscribeTopics([]string{"myTopic"}, nil)
-// 	if err != nil {
-// 		panic(err)
-// 	}
-// 	go func() {
-// 		run := true
-// 		for run {
-// 			msg, err := consumer.ReadMessage(time.Second)
-// 			if err == nil {
-// 				app.QueueUpdateDraw(func() {
-// 					textView.SetText(string(msg.Value))
-// 				})
-// 				// fmt.Printf("Message on %s: %s\n", msg.TopicPartition, string(msg.Value))
-// 			}
-// 			// else if !err.(kafka.Error).Error()() {
-// 			// 	// The client will automatically try to recover from all errors.
-// 			// 	// Timeout is not considered an error because it is raised by
-// 			// 	// ReadMessage in absence of messages.
-// 			// 	fmt.Printf("Consumer error: %v (%v)\n", err, msg)
-// 			// }
-// 		}
-// 	}()
-// 	// for _, line := range text {
-// 	// 	fmt.Fprintln(textView, line)
-// 	// }
-// 	consumer.Close()
-// }
-
 package main
 
 import (
+	"errors"
+	"fmt"
+	"log"
+	"strings"
+
 	"github.com/confluentinc/confluent-kafka-go/kafka"
 	"github.com/rivo/tview"
-	"log"
 )
 
 var app *tview.Application
@@ -95,46 +17,94 @@ var consumer *kafka.Consumer
 func main() {
 	app = tview.NewApplication()
 	textView = tview.NewTextView()
+	body := View(fmt.Sprintf("  Logs () "), "Hello World")
 
-	// Initialize Kafka consumer
+	baseFlex := buildBaseFlux(nil, body)
+
+	// Set the root primitive to the flex layout
+	app.SetRoot(baseFlex, true)
+
+	// Run the application
+	if err := app.Run(); err != nil {
+		panic(err)
+	}
+
+	kafkaMetadata := KafkaMetadata{
+		host:    "localhost",
+		groupId: "myGroup",
+	}
+	err := getConsumer(kafkaMetadata)
+	if err != nil {
+		log.Fatalf("Failed to create consumer: %s", err)
+	}
+	defer consumer.Close()
+
+	topics, err := getTopics()
+	if err != nil {
+		log.Fatalf("Failed to get topics: %s", err)
+	}
+	kafkaMetadata.topics = topics
+
+	fmt.Println(topics)
+
+}
+
+func View(title string, body string) tview.Primitive {
+
+	textView = tview.NewTextView()
+
+	textView.SetText(body)
+	textView.SetDynamicColors(true)
+	textView.SetTextColor(tview.Styles.PrimaryTextColor)
+	textView.SetTitle(title)
+	textView.SetBorderPadding(1, 1, 1, 1)
+	textView.SetBorder(true)
+	return textView
+}
+
+func buildBaseFlux(header tview.Primitive, body tview.Primitive) *tview.Flex {
+	return tview.NewFlex().
+		SetDirection(tview.FlexRow).
+		AddItem(header, 0, 1, false).
+		AddItem(body, 0, 10, true)
+}
+
+type KafkaMetadata struct {
+	host    string
+	groupId string
+	topics  []string
+}
+
+func getConsumer(kafkaMetadat KafkaMetadata) error {
 	var err error
 	consumer, err = kafka.NewConsumer(&kafka.ConfigMap{
-		"bootstrap.servers": "localhost",
-		"group.id":          "myGroup",
+		"bootstrap.servers": kafkaMetadat.host,
+		"group.id":          kafkaMetadat.groupId,
 		"auto.offset.reset": "earliest",
 	})
 	if err != nil {
 		log.Fatalf("Failed to create consumer: %s", err)
+		return err
 	}
 
-	err = consumer.Subscribe("myTopic", nil)
-	if err != nil {
-		log.Fatalf("Failed to subscribe to topic: %s", err)
-	}
-
-	go consumeMessages()
-
-	if err := app.SetRoot(textView, true).Run(); err != nil {
-		log.Fatalf("Error running application: %s", err)
-	}
+	return nil
 }
 
-func consumeMessages() {
-	for {
-		msg, err := consumer.ReadMessage(-1)
-		if err == nil {
-			log.Printf("Received message: %s", string(msg.Value))
-			// Process the message
-			updateUI(string(msg.Value))
-		} else {
-			log.Printf("Consumer error: %v (%v)\n", err, msg)
+func getTopics() ([]string, error) {
+	if consumer == nil {
+		return nil, errors.New("consumer not initialized")
+	}
+	metadata, err := consumer.GetMetadata(nil, true, 10000)
+	if err != nil {
+		return nil, err
+	}
+
+	// Extract and print topics
+	var topicsList []string
+	for topic := range metadata.Topics {
+		if !strings.HasPrefix(topic, "__") {
+			topicsList = append(topicsList, topic)
 		}
 	}
-}
-
-func updateUI(message string) {
-	app.QueueUpdateDraw(func() {
-		log.Printf("Updating UI with message: %s", message)
-		textView.SetText(message)
-	})
+	return topicsList, nil
 }
