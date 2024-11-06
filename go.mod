@@ -1,4 +1,4 @@
-module kafka-ui
+module TeaQueue
 
 go 1.22.1
 
