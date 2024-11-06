@@ -1,183 +1,138 @@
 package main
 
 import (
-	"errors"
-	"log"
-	"strings"
+	"fmt"
+	"os"
 
-	"github.com/confluentinc/confluent-kafka-go/kafka"
-	"github.com/gdamore/tcell/v2"
-	"github.com/rivo/tview"
+	"github.com/charmbracelet/bubbles/key"
+	"github.com/charmbracelet/bubbles/list"
+	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 )
 
-var app *tview.Application
-var textView *tview.TextView
-var consumer *kafka.Consumer
+var (
+	appStyle = lipgloss.NewStyle().Padding(1, 2)
 
-var hosts = [][]string{
-	{"localhost-9092", "localhost:9092", "local"},
-	{"localhost-9093", "localhost:9093", "SSH"},
-	{"localhost-9094", "localhost:9094", "Cloud"},
+	statusMessageStyle = lipgloss.NewStyle().
+				Foreground(lipgloss.AdaptiveColor{Light: "#04B575", Dark: "#04B575"}).
+				Render
+)
+
+type item struct {
+	title   string
+	brokers string
 }
 
-func main() {
-	app = tview.NewApplication()
-	textView = tview.NewTextView()
+func (i item) Title() string       { return i.title }
+func (i item) Description() string { return "Host : " + i.brokers }
+func (i item) FilterValue() string { return i.title }
 
-	// Define the callback function
-	onItemSelected := func(index int, mainText string, secondaryText string, shortcut rune) {
-		newItems := []string{"New Item 1", "New Item 2", "New Item 3"}
-		body := listViewBlock("  New List () ", newItems, nil)
-		baseFlex := buildBaseFlux(nil, body)
-		app.SetRoot(baseFlex, true)
-	}
-
-	body := tableViewBlock("  Hosts () ", hosts, onItemSelected)
-
-	baseFlex := buildBaseFlux(nil, body)
-
-	// Set the root primitive to the flex layout
-	app.SetRoot(baseFlex, true)
-
-	// Run the application
-	if err := app.Run(); err != nil {
-		panic(err)
-	}
-
-	// kafkaMetadata := KafkaMetadata{
-	// 	host:    "localhost",
-	// 	groupId: "myGroup",
-	// }
-	// err := getConsumer(kafkaMetadata)
-	// if err != nil {
-	// 	log.Fatalf("Failed to create consumer: %s", err)
-	// }
-	// defer consumer.Close()
-
-	// topics, err := getTopics()
-	// if err != nil {
-	// 	log.Fatalf("Failed to get topics: %s", err)
-	// }
-	// kafkaMetadata.topics = topics
-
-	// fmt.Println(topics)
-
+type listKeyMap struct {
+	togglePagination key.Binding
+	insertItem       key.Binding
 }
 
-func listViewBlock(title string, items []string, onItemSelected func(int, string, string, rune)) tview.Primitive {
-	listView := tview.NewList()
-	listView.SetTitle(title)
-	listView.SetBorder(true)
-	listView.SetBorderPadding(1, 1, 1, 1)
-	listView.SetMainTextColor(tcell.ColorLightSkyBlue)
-	listView.SetSelectedBackgroundColor(tcell.ColorLightSkyBlue)
-
-	// Add items to the list
-	for index, item := range items {
-		// Wrap the onItemSelected function in a closure
-		listView.AddItem(item, "", 0, func(i int, mainText, secondaryText string, shortcut rune) func() {
-			return func() {
-				onItemSelected(i, mainText, secondaryText, shortcut)
-			}
-		}(index, item, "", 0))
+func newListKeyMap() *listKeyMap {
+	return &listKeyMap{
+		insertItem: key.NewBinding(
+			key.WithKeys("a"),
+			key.WithHelp("a", "add item"),
+		),
+		togglePagination: key.NewBinding(
+			key.WithKeys("P"),
+			key.WithHelp("P", "toggle pagination"),
+		),
 	}
-
-	return listView
 }
 
-func tableViewBlock(title string, items [][]string, onItemSelected func(int, string, string, rune)) tview.Primitive {
-	tableView := tview.NewTable()
-	tableView.SetTitle(title)
-	tableView.SetBorder(true)
-	tableView.SetBorderPadding(1, 1, 1, 1)
-	tableView.SetSelectable(true, false)
+type model struct {
+	list         list.Model
+	keys         *listKeyMap
+	delegateKeys *delegateKeyMap
+}
 
-	// Add header row
-	headers := []string{"Name", "Broker Host", "Network"}
-	for colIndex, header := range headers {
-		cell := tview.NewTableCell(header).
-			SetTextColor(tcell.ColorYellow).
-			SetSelectable(false)
-		tableView.SetCell(0, colIndex, cell)
-		cell.SetExpansion(1)
-	}
+var items = []list.Item{
+	item{title: "localSetup", brokers: "localhost:9092"},
+	item{title: "dockerSetup", brokers: "localhost:9092"},
+	item{title: "K8sDev", brokers: "localhost:9092"},
+}
 
-	// Add items to the table
-	for rowIndex, row := range items {
-		for colIndex, cellText := range row {
-			cell := tview.NewTableCell(cellText).
-				SetTextColor(tcell.ColorLightSkyBlue).
-				SetSelectable(true)
-			tableView.SetCell(rowIndex+1, colIndex, cell)
+func newModel() model {
+	var (
+		delegateKeys = newDelegateKeyMap()
+		listKeys     = newListKeyMap()
+	)
+
+	// Setup list
+	delegate := newItemDelegate(delegateKeys)
+	groceryList := list.New(items, delegate, 0, 0)
+	groceryList.Title = "Chose Kafka profile"
+	// groceryList.Styles.Title = titleStyle
+	groceryList.AdditionalFullHelpKeys = func() []key.Binding {
+		return []key.Binding{
+			listKeys.insertItem,
+			listKeys.togglePagination,
 		}
 	}
 
-	// Wrap the onItemSelected function in a closure
-	tableView.SetSelectedFunc(func(row, column int) {
-		if row > 0 { // Skip header row
-			onItemSelected(row-1, items[row-1][0], items[row-1][1], 0)
-		}
-	})
-
-	return tableView
-}
-
-func textViewBlock(title string, body string) tview.Primitive {
-
-	textView = tview.NewTextView()
-
-	textView.SetText(body)
-	textView.SetDynamicColors(true)
-	textView.SetTextColor(tview.Styles.PrimaryTextColor)
-	textView.SetTitle(title)
-	textView.SetBorderPadding(1, 1, 1, 1)
-	textView.SetBorder(true)
-	return textView
-}
-
-func buildBaseFlux(header, body tview.Primitive) *tview.Flex {
-	return tview.NewFlex().
-		SetDirection(tview.FlexRow).
-		AddItem(header, 0, 1, false).
-		AddItem(body, 0, 10, true)
-}
-
-type KafkaMetadata struct {
-	host    string
-	groupId string
-	topics  []string
-}
-
-func getConsumer(kafkaMetadat KafkaMetadata) error {
-	var err error
-	consumer, err = kafka.NewConsumer(&kafka.ConfigMap{
-		"bootstrap.servers": kafkaMetadat.host,
-		"group.id":          kafkaMetadat.groupId,
-		"auto.offset.reset": "earliest",
-	})
-	if err != nil {
-		log.Fatalf("Failed to create consumer: %s", err)
-		return err
+	return model{
+		list:         groceryList,
+		keys:         listKeys,
+		delegateKeys: delegateKeys,
 	}
+}
 
+func (m model) Init() tea.Cmd {
 	return nil
 }
 
-func getTopics() ([]string, error) {
-	if consumer == nil {
-		return nil, errors.New("consumer not initialized")
-	}
-	metadata, err := consumer.GetMetadata(nil, true, 10000)
-	if err != nil {
-		return nil, err
-	}
+func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	var cmds []tea.Cmd
 
-	// Extract and print topics
-	var topicsList []string
-	for topic := range metadata.Topics {
-		if !strings.HasPrefix(topic, "__") {
-			topicsList = append(topicsList, topic)
+	switch msg := msg.(type) {
+	case tea.WindowSizeMsg:
+		h, v := appStyle.GetFrameSize()
+		m.list.SetSize(msg.Width-h, msg.Height-v)
+
+	case tea.KeyMsg:
+		// Don't match any of the keys below if we're actively filtering.
+		if m.list.FilterState() == list.Filtering {
+			break
+		}
+
+		if msg.String() == "esc" {
+			return m, nil
+		}
+
+		switch {
+
+		case key.Matches(msg, m.keys.togglePagination):
+			m.list.SetShowPagination(!m.list.ShowPagination())
+			return m, nil
+
+			// case key.Matches(msg, m.keys.insertItem):
+			// insCmd := m.list.InsertItem(0, newItem)
+			// statusCmd := m.list.NewStatusMessage(statusMessageStyle("Added " + newItem.Title()))
+			// return m, tea.Batch(insCmd, statusCmd)
 		}
 	}
-	return topicsList, nil
+
+	// This will also call our delegate's update function.
+	newListModel, cmd := m.list.Update(msg)
+	m.list = newListModel
+	cmds = append(cmds, cmd)
+
+	return m, tea.Batch(cmds...)
+}
+
+func (m model) View() string {
+	return appStyle.Render(m.list.View())
+}
+
+func main() {
+
+	if _, err := tea.NewProgram(newModel(), tea.WithAltScreen()).Run(); err != nil {
+		fmt.Println("Error running program:", err)
+		os.Exit(1)
+	}
 }
