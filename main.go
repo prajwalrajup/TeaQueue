@@ -37,7 +37,14 @@ func (m *MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, nil
 		case "enter":
-			m.currentModel = topicId
+			switch m.currentModel {
+			case profileId:
+				updatedData, cmd = m.profileModel.Update(msg)
+				m.profileModel = updatedData.(models.ProfileModel)
+				m.currentModel = topicId
+				m.topicsModel.SelectedProfile = m.profileModel.CurrentSeleted
+			}
+
 		case "ctrl+c":
 			return m, tea.Quit
 		}

@@ -14,7 +14,8 @@ func (i topicItem) Description() string { return i.desc }
 func (i topicItem) FilterValue() string { return i.title }
 
 type TopicsModel struct {
-	list list.Model
+	list            list.Model
+	SelectedProfile string
 }
 
 func (m TopicsModel) Init() tea.Cmd {
@@ -33,6 +34,24 @@ func (m TopicsModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		h, v := docStyle.GetFrameSize()
 		m.list.SetSize(msg.Width-h, msg.Height-v)
+	}
+
+	switch m.SelectedProfile {
+	case "localSetup":
+		m.list.SetItems([]list.Item{
+			topicItem{title: "local Kafka", desc: "localhost:9092"},
+			topicItem{title: "local remote", desc: "localhost:9092"},
+		})
+	case "dockerSetup":
+		m.list.SetItems([]list.Item{
+			topicItem{title: "docker Kafka", desc: "localhost:9092"},
+			topicItem{title: "docker remote", desc: "localhost:9092"},
+		})
+	case "K8sDev":
+		m.list.SetItems([]list.Item{
+			topicItem{title: "K8s Kafka", desc: "localhost:9092"},
+			topicItem{title: "K8s remote", desc: "localhost:9092"},
+		})
 	}
 
 	var cmd tea.Cmd
