@@ -1,6 +1,7 @@
 package models
 
 import (
+	"TeaQueue/utils"
 	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -38,9 +39,9 @@ func (m ProfileModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.list.SetSize(msg.Width-h, msg.Height-v)
 	}
 
-	selectedItem := m.list.SelectedItem()
-	if selectedItem != nil {
-		m.CurrentSeleted = selectedItem.(item).Title()
+	profileSelectedItem := m.list.SelectedItem()
+	if profileSelectedItem != nil {
+		m.CurrentSeleted = profileSelectedItem.(item).Title()
 	}
 
 	var cmd tea.Cmd
@@ -52,11 +53,11 @@ func (m ProfileModel) View() string {
 	return docStyle.Render(m.list.View())
 }
 
-func InitProfileModel() ProfileModel {
-	items := []list.Item{
-		item{title: "localSetup", desc: "localhost:9092"},
-		item{title: "dockerSetup", desc: "localhost:9092"},
-		item{title: "K8sDev", desc: "localhost:9092"},
+func InitProfileModel(config utils.Config) ProfileModel {
+	items := []list.Item{}
+
+	for key, value := range config.Profile {
+		items = append(items, item{title: key, desc: value.Desc})
 	}
 
 	ist := list.New(items, list.NewDefaultDelegate(), 0, 0)

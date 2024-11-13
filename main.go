@@ -5,6 +5,7 @@ import (
 	"os"
 
 	"TeaQueue/models"
+	"TeaQueue/utils"
 	tea "github.com/charmbracelet/bubbletea"
 )
 
@@ -18,7 +19,7 @@ const (
 type MainModel struct {
 	currentModel modelID
 	profileModel models.ProfileModel
-	topicsModel  models.TopicsModel
+	topicsModel  models.ServerModel
 }
 
 func (m *MainModel) Init() tea.Cmd {
@@ -43,6 +44,10 @@ func (m *MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.profileModel = updatedData.(models.ProfileModel)
 				m.currentModel = topicId
 				m.topicsModel.SelectedProfile = m.profileModel.CurrentSeleted
+			case topicId:
+				updatedData, cmd = m.topicsModel.Update(msg)
+				m.topicsModel = updatedData.(models.ServerModel)
+
 			}
 
 		case "ctrl+c":
@@ -56,7 +61,7 @@ func (m *MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.profileModel = updatedData.(models.ProfileModel)
 	case topicId:
 		updatedData, cmd = m.topicsModel.Update(msg)
-		m.topicsModel = updatedData.(models.TopicsModel)
+		m.topicsModel = updatedData.(models.ServerModel)
 	}
 
 	return m, cmd
@@ -77,10 +82,15 @@ func (m *MainModel) View() string {
 }
 
 func newModel() tea.Model {
+	config, err := utils.ReadConfig()
+	if err != nil {
+		panic(err)
+	}
+
 	return &MainModel{
 		currentModel: profileId,
-		profileModel: models.InitProfileModel(),
-		topicsModel:  models.InitTopicsModel(),
+		profileModel: models.InitProfileModel(config),
+		topicsModel:  models.InitServerModel(config),
 	}
 }
 

@@ -1,0 +1,21 @@
+Profile:
+  "local setup":
+    desc: "Local Kafka"
+    servers:
+      localhost:
+        desc: "localhost:9092"
+  
+  "Docker setup":
+    desc: "Local Docker"
+    servers:
+      "Docker Vendor 1":
+        desc: "localhost:9092"
+      "Docker Vendor 2":
+        desc: "localhost:9093"
+  "K8sDev":
+    desc: "Local K8s"
+    servers:
+      "K8 Vendor 1":
+        desc: "localhost:9092"
+      "K8 Vendor 2":
+        desc: "localhost:9093"

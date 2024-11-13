@@ -1,8 +1,0 @@
-localSetup:
-  brokers: "localhost:9092"
-
-dockerSetup:
-  brokers: "localhost:9092"
-
-K8sDev:
-  brokers: "localhost:9092"
